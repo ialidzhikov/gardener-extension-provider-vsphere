@@ -20,11 +20,16 @@ package helper
 import (
 	"fmt"
 
-	"github.com/gardener/gardener-extensions/pkg/controller"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/validation/field"
+
+	"github.com/gardener/gardener-extensions/pkg/controller"
+	"github.com/gardener/gardener-extensions/pkg/util"
+	"github.com/gardener/gardener/pkg/apis/core"
+	gardencorev1beta1 "github.com/gardener/gardener/pkg/apis/core/v1beta1"
 
 	"github.com/gardener/gardener-extension-provider-vsphere/pkg/apis/vsphere"
 	"github.com/gardener/gardener-extension-provider-vsphere/pkg/apis/vsphere/install"
@@ -48,13 +53,14 @@ func init() {
 func GetCloudProfileConfig(cluster *controller.Cluster) (*vsphere.CloudProfileConfig, error) {
 	var cloudProfileConfig *vsphere.CloudProfileConfig
 	if cluster != nil && cluster.CloudProfile != nil && cluster.CloudProfile.Spec.ProviderConfig != nil && cluster.CloudProfile.Spec.ProviderConfig.Raw != nil {
-		cloudProfileConfig = &vsphere.CloudProfileConfig{}
-		if _, _, err := decoder.Decode(cluster.CloudProfile.Spec.ProviderConfig.Raw, nil, cloudProfileConfig); err != nil {
-			return nil, errors.Wrapf(err, "could not decode providerConfig of cloudProfile for '%s'", cluster.Shoot.Name)
+		var err error
+		cloudProfileConfig, err = DecodeCloudProfileConfig(cluster.CloudProfile.Spec.ProviderConfig, field.NewPath("cloudprofile", "spec", "providerConfig"))
+		if err != nil {
+			return nil, errors.Wrapf(err, "cloud profile %s", cluster.CloudProfile.Name)
 		}
 		// TODO validate cloud profile on admission instead
 		if errs := validation.ValidateCloudProfileConfig(cloudProfileConfig); len(errs) > 0 {
-			return nil, errors.Wrap(errs.ToAggregate(), fmt.Sprintf("validation of providerConfig of cloud profile %q failed", cluster.CloudProfile.Name))
+			return nil, errors.Wrap(errs.ToAggregate(), fmt.Sprintf("validation of providerConfig of cloud profile %s failed", cluster.CloudProfile.Name))
 		}
 	}
 	return cloudProfileConfig, nil
@@ -92,4 +98,31 @@ func GetInfrastructureConfig(cluster *controller.Cluster) (*vsphere.Infrastructu
 		return config, nil
 	}
 	return config, nil
+}
+
+func DecodeControlPlaneConfig(cp *core.ProviderConfig, fldPath *field.Path) (*vsphere.ControlPlaneConfig, error) {
+	controlPlaneConfig := &vsphere.ControlPlaneConfig{}
+	if err := util.Decode(decoder, cp.Raw, controlPlaneConfig); err != nil {
+		return nil, field.Invalid(fldPath, string(cp.Raw), "cannot be decoded")
+	}
+
+	return controlPlaneConfig, nil
+}
+
+func DecodeInfrastructureConfig(infra *core.ProviderConfig, fldPath *field.Path) (*vsphere.InfrastructureConfig, error) {
+	infraConfig := &vsphere.InfrastructureConfig{}
+	if err := util.Decode(decoder, infra.Raw, infraConfig); err != nil {
+		return nil, fmt.Errorf("cannot be decoded")
+	}
+
+	return infraConfig, nil
+}
+
+func DecodeCloudProfileConfig(config *gardencorev1beta1.ProviderConfig, fldPath *field.Path) (*vsphere.CloudProfileConfig, error) {
+	cloudProfileConfig := &vsphere.CloudProfileConfig{}
+	if err := util.Decode(decoder, config.Raw, cloudProfileConfig); err != nil {
+		return nil, field.Invalid(fldPath, string(config.Raw), "cannot be decoded")
+	}
+
+	return cloudProfileConfig, nil
 }

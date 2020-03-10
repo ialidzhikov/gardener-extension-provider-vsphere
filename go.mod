@@ -31,6 +31,7 @@ require (
 	k8s.io/code-generator v0.17.0
 	k8s.io/component-base v0.17.0
 	k8s.io/kubelet v0.0.0-20190918162654-250a1838aa2c
+	k8s.io/utils v0.0.0-20191218082557-f07c713de883
 	sigs.k8s.io/controller-runtime v0.4.0
 )
 
